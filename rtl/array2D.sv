@@ -17,27 +17,7 @@
 // Revision 0.01 - File Created
 // Additional Comments:
 // 
-//////////////////////////////////////////////////////////////////////////////////
-module skewRegisterAct #(
-    parameter ACT_WIDTH = 8
-)(
-    input logic signed [ACT_WIDTH-1:0] act_in,
-    input logic clock, flush_in, lock_in, reset,
-    output logic signed [ACT_WIDTH-1:0] act_out,
-    output logic flush_out, lock_out
-);
-    always_ff @(posedge clock or posedge reset) begin
-        if (reset) begin
-            act_out <= 0;
-            flush_out <= 0;
-            lock_out <= 0;
-        end else begin
-            act_out <= act_in;
-            flush_out <= flush_in;
-            lock_out <= lock_in;
-        end
-    end
-endmodule
+/////////////////////////////////////////////////////////////////////////////////
 
 module array2D #(
     parameter NUM_PE = 4,
@@ -106,5 +86,35 @@ module array2D #(
         
     endgenerate
     
-    assign p_sum_out = internal_psum[NUM_ROWS];
+    
+    
+    genvar k,l;
+    generate
+        for(k = 0; k < NUM_PE; k = k + 1) begin
+            
+            localparam int DELAY_DEPTH = NUM_PE - 1 - k;
+            
+            if (DELAY_DEPTH == 0) begin
+                assign p_sum_out[k] = internal_psum[NUM_ROWS][k];
+            end else begin
+                logic signed [PSUM_WIDTH-1:0] psum_buffer [0:DELAY_DEPTH];
+                assign psum_buffer[0] = internal_psum[NUM_ROWS][k];
+                
+                for(l=0; l < DELAY_DEPTH; l = l + 1) begin
+                    deSkewRegister #(
+                        .PSUM_WIDTH(PSUM_WIDTH)
+                    ) deSkewPsum_inst (
+                        .clock(clock),
+                        .reset(reset),
+                        .lock_in(lock_in),
+                        .psum_in(psum_buffer[l]),
+                        .psum_out(psum_buffer[l+1])
+                    );
+                end
+                
+                assign p_sum_out[k] = psum_buffer[DELAY_DEPTH];
+            end
+            
+        end
+    endgenerate
 endmodule
